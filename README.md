@@ -9,5 +9,9 @@ planned features
 
 
 changes (2026-03-21)
-- stealer crashing if ip grvbber doesn't work
-- billing info fixed
+- fixed an issue where stealer crashing if ip grabber doesn't work
+- fixed billing info retrieval
+
+changes (2026-06-26)
+- added wi-fi network retrieval
+- getting the computer's ram no longer requires the psutil module and getting the os no longer requires the platform module
